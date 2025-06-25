@@ -201,8 +201,8 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                 <FormItem>
                   <FormLabel>Assignee</FormLabel>
                   <Select 
-                    onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)} 
-                    value={field.value?.toString()}
+                    onValueChange={(value) => field.onChange(value === "unassigned" ? undefined : parseInt(value))} 
+                    value={field.value?.toString() || "unassigned"}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -210,7 +210,7 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">Unassigned</SelectItem>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
                       {members?.map((member) => (
                         <SelectItem key={member.id} value={member.id.toString()}>
                           {member.name}
