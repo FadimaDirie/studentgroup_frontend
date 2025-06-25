@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertGroupSchema, insertMemberSchema, insertTaskSchema } from "@shared/schema";
+import { insertGroupSchema, insertMemberSchema, insertTaskSchema } from "./shared/schema.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Groups routes

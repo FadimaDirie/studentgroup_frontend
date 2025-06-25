@@ -1,4 +1,4 @@
-import { groups, members, tasks, type Group, type InsertGroup, type Member, type InsertMember, type Task, type InsertTask, type GroupWithStats, type TaskWithDetails } from "@shared/schema";
+import { groups, members, tasks, type Group, type InsertGroup, type Member, type InsertMember, type Task, type InsertTask, type GroupWithStats, type TaskWithDetails } from "./shared/schema.js";
 import { db } from "./db";
 import { eq, sql } from "drizzle-orm";
 
