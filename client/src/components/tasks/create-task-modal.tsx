@@ -82,7 +82,7 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg bg-card text-card-foreground shadow-2xl border-0 transition-colors duration-500">
         <DialogHeader>
           <DialogTitle>Create New Task</DialogTitle>
         </DialogHeader>
@@ -97,7 +97,7 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                   <FormLabel>Group</FormLabel>
                   <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString()}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-input text-foreground border border-border">
                         <SelectValue placeholder="Select a group" />
                       </SelectTrigger>
                     </FormControl>
@@ -121,7 +121,7 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                 <FormItem>
                   <FormLabel>Task Title</FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter task title..." {...field} />
+                    <Input placeholder="Enter task title..." {...field} className="bg-input text-foreground border border-border" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -139,6 +139,8 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                       placeholder="Describe the task..." 
                       rows={3}
                       {...field}
+                      value={field.value ?? ""}
+                      className="bg-input text-foreground border border-border"
                     />
                   </FormControl>
                   <FormMessage />
@@ -155,7 +157,7 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                     <FormLabel>Status</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="bg-input text-foreground border border-border">
                           <SelectValue />
                         </SelectTrigger>
                       </FormControl>
@@ -178,7 +180,7 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                     <FormLabel>Priority</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="bg-input text-foreground border border-border">
                           <SelectValue />
                         </SelectTrigger>
                       </FormControl>
@@ -205,7 +207,7 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                     value={field.value?.toString() || "unassigned"}
                   >
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-input text-foreground border border-border">
                         <SelectValue placeholder="Select an assignee (optional)" />
                       </SelectTrigger>
                     </FormControl>
@@ -251,7 +253,7 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
-                        selected={field.value}
+                        selected={field.value ?? undefined}
                         onSelect={field.onChange}
                         disabled={(date) =>
                           date < new Date() || date < new Date("1900-01-01")

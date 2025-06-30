@@ -1,297 +1,406 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRoute } from "wouter";
+import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Users } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import { CreateTaskModal } from "@/components/tasks/create-task-modal";
-import { Plus, UserPlus, Users, CheckSquare } from "lucide-react";
-import { formatRelativeTime, formatDate, getInitials, getStatusColor, getPriorityColor } from "@/lib/utils";
-import { Group, Member, Task, insertMemberSchema, type InsertMember } from "@shared/schema";
+import { toast } from "react-hot-toast";
 
 export default function GroupDetail() {
-  const [, params] = useRoute("/groups/:id");
-  const groupId = params?.id ? parseInt(params.id) : 0;
-  const [showAddMember, setShowAddMember] = useState(false);
-  const [showCreateTask, setShowCreateTask] = useState(false);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const [groups, setGroups] = useState<any[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(true);
+  const [errorGroups, setErrorGroups] = useState("");
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createDescription, setCreateDescription] = useState("");
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [addMemberEmail, setAddMemberEmail] = useState("");
+  const [addMemberLoading, setAddMemberLoading] = useState(false);
+  const [addMemberError, setAddMemberError] = useState("");
+  const [joinLoading, setJoinLoading] = useState(false);
 
-  const { data: group, isLoading: groupLoading } = useQuery<Group>({
-    queryKey: ["/api/groups", groupId],
-    enabled: !!groupId,
-  });
+  // Get logged-in user
+  let user: any = null;
+  try {
+    user = JSON.parse(localStorage.getItem("user") || "null");
+  } catch {}
+  const userId = user?._id;
 
-  const { data: members, isLoading: membersLoading } = useQuery<Member[]>({
-    queryKey: ["/api/groups", groupId, "members"],
-    enabled: !!groupId,
-  });
+  // Fetch all groups
+  useEffect(() => {
+    async function fetchGroups() {
+      setLoadingGroups(true);
+      setErrorGroups("");
+      try {
+        const res = await fetch("https://mernstack-backend-vtfj.onrender.com/api");
+        const data = await res.json();
+        if (!res.ok) {
+          setErrorGroups(data.message || "Failed to fetch groups");
+        } else {
+          setGroups(data);
+        }
+      } catch (err) {
+        setErrorGroups("Network error. Please try again.");
+      } finally {
+        setLoadingGroups(false);
+      }
+    }
+    fetchGroups();
+  }, []);
 
-  const { data: tasks, isLoading: tasksLoading } = useQuery<Task[]>({
-    queryKey: ["/api/groups", groupId, "tasks"],
-    enabled: !!groupId,
-  });
-
-  const form = useForm<InsertMember>({
-    resolver: zodResolver(insertMemberSchema),
-    defaultValues: {
-      groupId,
-      name: "",
-      email: "",
-    },
-  });
-
-  const addMemberMutation = useMutation({
-    mutationFn: async (data: InsertMember) => {
-      const response = await apiRequest("POST", "/api/members", data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/groups", groupId, "members"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
-      toast({
-        title: "Success",
-        description: "Member added successfully!",
+  // Create group handler
+  async function handleCreateGroup(e: React.FormEvent) {
+    e.preventDefault();
+    setCreateError("");
+    if (!createName || !createDescription) {
+      setCreateError("Please fill all fields");
+      return;
+    }
+    if (!userId) {
+      setCreateError("User not found. Please login again.");
+      return;
+    }
+    setCreateLoading(true);
+    try {
+      const res = await fetch("https://mernstack-backend-vtfj.onrender.com/api/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: createName,
+          description: createDescription,
+          createdBy: userId,
+          members: [userId]
+        })
       });
-      form.reset({ groupId, name: "", email: "" });
-      setShowAddMember(false);
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const onSubmit = (data: InsertMember) => {
-    addMemberMutation.mutate(data);
-  };
-
-  if (groupLoading) {
-    return (
-      <AppLayout title="Loading..." description="Loading group details">
-        <div className="space-y-6">
-          <Skeleton className="h-32 w-full" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Skeleton className="h-64 w-full" />
-            <Skeleton className="h-64 w-full" />
-          </div>
-        </div>
-      </AppLayout>
-    );
+      const data = await res.json();
+      if (!res.ok) {
+        setCreateError(data.message || "Failed to create group");
+      } else {
+        setGroups((prev) => [...prev, data.group]);
+        setShowCreateGroup(false);
+        setCreateName("");
+        setCreateDescription("");
+      }
+    } catch (err) {
+      setCreateError("Network error. Please try again.");
+    } finally {
+      setCreateLoading(false);
+    }
   }
 
-  if (!group) {
-    return (
-      <AppLayout title="Not Found" description="Group not found">
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">Group not found</p>
-        </div>
-      </AppLayout>
-    );
+  // Handler: open group modal
+  function handleOpenGroupModal(group: any) {
+    setSelectedGroup(group);
+    setShowGroupModal(true);
+    setEditMode(false);
+    setEditName(group.name);
+    setEditDescription(group.description);
   }
+
+  // Handler: update group info (owner only)
+  async function handleUpdateGroup(e: React.FormEvent) {
+    e.preventDefault();
+    setEditError("");
+    setEditLoading(true);
+    try {
+      const res = await fetch(`https://mernstack-backend-vtfj.onrender.com/api/groups/${selectedGroup._id}/update`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editName, description: editDescription }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setEditError(data.message || "Failed to update group");
+      } else {
+        setGroups((prev) => prev.map(g => g._id === selectedGroup._id ? { ...g, name: editName, description: editDescription } : g));
+        setSelectedGroup((g: any) => ({ ...g, name: editName, description: editDescription }));
+        setEditMode(false);
+        toast.success("Group updated!");
+      }
+    } catch {
+      setEditError("Network error. Please try again.");
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  // Handler: add member (owner only)
+  async function handleAddMember(e: React.FormEvent) {
+    e.preventDefault();
+    setAddMemberError("");
+    setAddMemberLoading(true);
+    try {
+      const res = await fetch(`https://mernstack-backend-vtfj.onrender.com/api/groups/${selectedGroup._id}/add-member`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: addMemberEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAddMemberError(data.message || "Failed to add member");
+      } else {
+        setGroups((prev) => prev.map(g => g._id === selectedGroup._id ? { ...g, members: data.members } : g));
+        setSelectedGroup((g: any) => ({ ...g, members: data.members }));
+        setAddMemberEmail("");
+        toast.success("Member added!");
+      }
+    } catch {
+      setAddMemberError("Network error. Please try again.");
+    } finally {
+      setAddMemberLoading(false);
+    }
+  }
+
+  // Handler: remove member (owner only)
+  async function handleRemoveMember(memberId: string) {
+    if (!window.confirm("Remove this member from the group?")) return;
+    try {
+      const res = await fetch(`https://mernstack-backend-vtfj.onrender.com/api/groups/${selectedGroup._id}/remove-member/${memberId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.message || "Failed to remove member");
+      } else {
+        setGroups((prev) => prev.map(g => g._id === selectedGroup._id ? { ...g, members: data.members } : g));
+        setSelectedGroup((g: any) => ({ ...g, members: data.members }));
+        toast.success("Member removed!");
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
+    }
+  }
+
+  // Handler: update group admin (make member admin)
+  async function handleMakeAdmin(newAdminId: string) {
+    if (!window.confirm("Are you sure you want to make this member the new admin?")) return;
+    try {
+      const res = await fetch(`https://mernstack-backend-vtfj.onrender.com/api/${selectedGroup._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminId: newAdminId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.message || "Failed to update admin");
+      } else {
+        setGroups((prev) => prev.map(g => g._id === selectedGroup._id ? { ...g, createdBy: newAdminId } : g));
+        setSelectedGroup((g: any) => ({ ...g, createdBy: newAdminId }));
+        toast.success("Admin updated!");
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
+    }
+  }
+
+  // Handler: join group
+  async function handleJoinGroup() {
+    setJoinLoading(true);
+    try {
+      const res = await fetch(`https://mernstack-backend-vtfj.onrender.com/api/groups/${selectedGroup._id}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.message || "Failed to join group");
+      } else {
+        setGroups((prev) => prev.map(g => g._id === selectedGroup._id ? { ...g, members: data.members } : g));
+        setSelectedGroup((g: any) => ({ ...g, members: data.members }));
+        toast.success("Joined group!");
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setJoinLoading(false);
+    }
+  }
+
+  // Gradients for cards
+  const gradients = [
+    "from-blue-500 via-purple-500 to-pink-500",
+    "from-green-400 via-blue-500 to-purple-500",
+    "from-yellow-400 via-red-400 to-pink-500",
+    "from-indigo-500 via-sky-400 to-emerald-400",
+    "from-pink-500 via-red-400 to-yellow-400",
+    "from-purple-500 via-fuchsia-500 to-pink-400",
+  ];
 
   return (
     <AppLayout
-      title={group.name}
-      description={group.description}
+      title="Groups"
+      description="All groups and details"
       action={{
-        label: "Create Task",
-        onClick: () => setShowCreateTask(true),
+        label: "Create Group",
+        onClick: () => setShowCreateGroup(true),
       }}
     >
-      <div className="space-y-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Users className="w-4 h-4 text-blue-600" />
+      <div className="max-w-5xl mx-auto space-y-8 bg-background text-foreground transition-colors duration-500">
+        {/* Group List */}
+        {loadingGroups ? (
+          <div>Loading groups...</div>
+        ) : errorGroups ? (
+          <div className="text-destructive">{errorGroups}</div>
+        ) : groups.length === 0 ? (
+          <div>No groups found.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {groups.map((group, idx) => (
+              <div
+                key={group._id}
+                className={`relative rounded-2xl shadow-xl overflow-hidden cursor-pointer group transition-transform hover:scale-105 bg-gradient-to-br ${gradients[idx % gradients.length]} p-0`}
+                onClick={() => handleOpenGroupModal(group)}
+                style={{ minHeight: 180 }}
+              >
+                <div className="absolute inset-0 bg-card/90 rounded-2xl z-10" />
+                <div className="relative z-10 p-6 flex flex-col h-full justify-between">
+                  <div className="flex items-center gap-4 mb-2">
+                    <span className="inline-flex items-center justify-center rounded-full bg-white/40 dark:bg-black/40 p-4 shadow-lg">
+                      <Users className="w-8 h-8 text-primary drop-shadow" />
+                    </span>
+                    <div>
+                      <h4 className="text-xl font-bold text-white drop-shadow-lg">{group.name}</h4>
+                      <p className="text-white/80 text-sm drop-shadow">{group.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-4">
+                    <span className="text-xs text-white/80 font-medium bg-black/20 rounded-full px-3 py-1">{group.members?.length || 0} members</span>
+                    <span className="text-xs text-white/80 font-medium bg-black/20 rounded-full px-3 py-1">Created: {new Date(group.createdAt).toLocaleDateString()}</span>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Members</p>
-                  <p className="text-xl font-semibold">{members?.length || 0}</p>
+                <div className="absolute right-4 top-4 opacity-20 group-hover:opacity-40 transition-opacity">
+                  <Users className="w-16 h-16 text-white" />
                 </div>
               </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                  <CheckSquare className="w-4 h-4 text-green-600" />
+            ))}
+          </div>
+        )}
+
+        {/* Group Detail Modal */}
+        <Dialog open={showGroupModal} onOpenChange={setShowGroupModal}>
+          <DialogContent className="max-w-2xl bg-card text-card-foreground shadow-2xl rounded-2xl border-0 transition-colors duration-500">
+            {selectedGroup && (
+              <div className="space-y-6">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-bold text-primary drop-shadow">Group Details</DialogTitle>
+                </DialogHeader>
+                {/* Group Info */}
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    {editMode ? (
+                      <form onSubmit={handleUpdateGroup} className="space-y-2">
+                        <Input value={editName} onChange={e => setEditName(e.target.value)} className="font-bold text-lg" />
+                        <Textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={2} />
+                        {editError && <div className="text-destructive text-sm">{editError}</div>}
+                        <div className="flex gap-2 mt-2">
+                          <Button type="button" variant="outline" onClick={() => setEditMode(false)} disabled={editLoading}>Cancel</Button>
+                          <Button type="submit" disabled={editLoading}>{editLoading ? "Saving..." : "Save"}</Button>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="inline-flex items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-purple-500 p-3 shadow-lg">
+                            <Users className="w-7 h-7 text-white" />
+                          </span>
+                          <h2 className="font-bold text-2xl flex items-center gap-2 text-primary drop-shadow">{selectedGroup.name} {selectedGroup.createdBy === userId && <Badge variant="outline" className="bg-yellow-400/80 text-black border-0 ml-2">Admin</Badge>}</h2>
+                        </div>
+                        <div className="text-muted-foreground mb-2 text-lg">{selectedGroup.description}</div>
+                        <div className="flex gap-2 mt-2">
+                          {selectedGroup.createdBy === userId && (
+                            <Button size="sm" variant="secondary" onClick={() => setEditMode(true)}>Edit</Button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {/* Join button */}
+                  {selectedGroup.members && !selectedGroup.members.some((m: any) => m._id === userId) && (
+                    <Button onClick={handleJoinGroup} disabled={joinLoading} variant="default" className="text-lg px-6 py-2 rounded-xl shadow-md bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0">
+                      {joinLoading ? "Joining..." : "Join Group"}
+                    </Button>
+                  )}
                 </div>
+                {/* Members List */}
                 <div>
-                  <p className="text-sm text-muted-foreground">Tasks</p>
-                  <p className="text-xl font-semibold">{tasks?.length || 0}</p>
+                  <div className="font-semibold mb-2 text-lg text-primary">Members ({selectedGroup.members?.length || 0})</div>
+                  <div className="flex flex-wrap gap-4">
+                    {selectedGroup.members?.map((member: any) => (
+                      <div key={member._id} className="flex flex-col items-center gap-2 bg-muted rounded-xl px-4 py-3 shadow-md min-w-[110px] transition-all hover:scale-105">
+                        <Avatar className="w-12 h-12 text-lg font-bold bg-gradient-to-br from-blue-400 to-purple-500 text-white">
+                          {member.name?.[0] || member.email?.[0] || '?'}
+                        </Avatar>
+                        <span className="font-medium text-primary text-base">{member.name || member.email || 'Unknown'}</span>
+                        {selectedGroup.createdBy === member._id ? (
+                          <Badge variant="secondary" className="bg-yellow-400/80 text-black border-0">Admin</Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-blue-100 text-blue-700 border-0">Member</Badge>
+                        )}
+                        {selectedGroup.createdBy === userId && member._id !== userId && (
+                          <div className="flex flex-col gap-1 w-full">
+                            <Button size="sm" variant="destructive" className="mt-1" onClick={() => handleRemoveMember(member._id)}>Remove</Button>
+                            <Button size="sm" variant="secondary" className="mt-1" onClick={() => handleMakeAdmin(member._id)}>Make Admin</Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Add member (owner only) */}
+                  {selectedGroup.createdBy === userId && (
+                    <form onSubmit={handleAddMember} className="flex gap-2 mt-6 items-center">
+                      <Input placeholder="Add member by email..." value={addMemberEmail} onChange={e => setAddMemberEmail(e.target.value)} className="max-w-xs" />
+                      <Button type="submit" size="sm" disabled={addMemberLoading} className="bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0">{addMemberLoading ? "Adding..." : "Add Member"}</Button>
+                      {addMemberError && <span className="text-destructive text-sm ml-2">{addMemberError}</span>}
+                    </form>
+                  )}
                 </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Group Modal */}
+        <Dialog open={showCreateGroup} onOpenChange={setShowCreateGroup}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create New Group</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleCreateGroup} className="space-y-4">
+                <div>
+                <label className="block mb-1 font-medium">Group Name</label>
+                <Input placeholder="Enter group name..." value={createName} onChange={e => setCreateName(e.target.value)} />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Created</p>
-                <p className="text-xl font-semibold">{formatRelativeTime(group.createdAt)}</p>
+                <label className="block mb-1 font-medium">Description</label>
+                <Textarea placeholder="Describe your group's purpose..." rows={3} value={createDescription} onChange={e => setCreateDescription(e.target.value)} />
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-              <CardTitle className="text-lg font-semibold">Members</CardTitle>
-              <Dialog open={showAddMember} onOpenChange={setShowAddMember}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="flex items-center space-x-2">
-                    <UserPlus className="w-4 h-4" />
-                    <span>Add Member</span>
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Member</DialogTitle>
-                  </DialogHeader>
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Name</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Enter member name..." {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="email"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Email</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Enter email address..." {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <div className="flex justify-end space-x-3">
-                        <Button type="button" variant="outline" onClick={() => setShowAddMember(false)}>
+              {createError && <div className="text-destructive text-sm">{createError}</div>}
+              <div className="flex justify-end space-x-3 pt-4">
+                <Button type="button" variant="outline" onClick={() => setShowCreateGroup(false)} disabled={createLoading}>
                           Cancel
                         </Button>
-                        <Button type="submit" disabled={addMemberMutation.isPending}>
-                          {addMemberMutation.isPending ? "Adding..." : "Add Member"}
+                <Button type="submit" disabled={createLoading}>
+                  {createLoading ? "Creating..." : "Create Group"}
                         </Button>
                       </div>
                     </form>
-                  </Form>
                 </DialogContent>
               </Dialog>
-            </CardHeader>
-            <CardContent>
-              {membersLoading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="flex items-center space-x-3">
-                      <Skeleton className="w-8 h-8 rounded-full" />
-                      <div className="space-y-1">
-                        <Skeleton className="h-4 w-24" />
-                        <Skeleton className="h-3 w-32" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : members && members.length > 0 ? (
-                <div className="space-y-3">
-                  {members.map((member) => (
-                    <div key={member.id} className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center text-sm font-medium">
-                        {getInitials(member.name)}
-                      </div>
-                      <div>
-                        <p className="font-medium text-card-foreground">{member.name}</p>
-                        <p className="text-sm text-muted-foreground">{member.email}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-center py-4">No members yet</p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-              <CardTitle className="text-lg font-semibold">Tasks</CardTitle>
-              <Button size="sm" onClick={() => setShowCreateTask(true)} className="flex items-center space-x-2">
-                <Plus className="w-4 h-4" />
-                <span>Add Task</span>
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {tasksLoading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="space-y-2">
-                      <Skeleton className="h-4 w-3/4" />
-                      <Skeleton className="h-3 w-1/2" />
-                      <div className="flex space-x-2">
-                        <Skeleton className="h-5 w-16" />
-                        <Skeleton className="h-5 w-16" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : tasks && tasks.length > 0 ? (
-                <div className="space-y-4">
-                  {tasks.map((task) => (
-                    <div key={task.id} className="border-b border-border pb-3 last:border-b-0">
-                      <div className="flex items-start justify-between mb-2">
-                        <h4 className="font-medium text-card-foreground">{task.title}</h4>
-                        <div className="flex space-x-2">
-                          <Badge className={getStatusColor(task.status)}>
-                            {task.status.replace("_", " ")}
-                          </Badge>
-                          <Badge className={getPriorityColor(task.priority)}>
-                            {task.priority}
-                          </Badge>
-                        </div>
-                      </div>
-                      {task.description && (
-                        <p className="text-sm text-muted-foreground mb-2">{task.description}</p>
-                      )}
-                      {task.dueDate && (
-                        <p className="text-xs text-muted-foreground">
-                          Due: {formatDate(task.dueDate)}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-center py-4">No tasks yet</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
       </div>
-
-      <CreateTaskModal
-        open={showCreateTask}
-        onOpenChange={setShowCreateTask}
-        initialGroupId={groupId}
-      />
     </AppLayout>
   );
 }

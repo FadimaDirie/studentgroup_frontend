@@ -3,49 +3,49 @@
 @tailwind utilities;
 
 :root {
-  --background: hsl(0, 0%, 100%);
-  --foreground: hsl(20, 14.3%, 4.1%);
-  --muted: hsl(60, 4.8%, 95.9%);
-  --muted-foreground: hsl(25, 5.3%, 44.7%);
-  --popover: hsl(0, 0%, 100%);
-  --popover-foreground: hsl(20, 14.3%, 4.1%);
-  --card: hsl(0, 0%, 100%);
-  --card-foreground: hsl(20, 14.3%, 4.1%);
-  --border: hsl(20, 5.9%, 90%);
-  --input: hsl(20, 5.9%, 90%);
-  --primary: hsl(207, 90%, 54%);
-  --primary-foreground: hsl(211, 100%, 99%);
-  --secondary: hsl(60, 4.8%, 95.9%);
-  --secondary-foreground: hsl(24, 9.8%, 10%);
-  --accent: hsl(60, 4.8%, 95.9%);
-  --accent-foreground: hsl(24, 9.8%, 10%);
-  --destructive: hsl(0, 84.2%, 60.2%);
-  --destructive-foreground: hsl(60, 9.1%, 97.8%);
-  --ring: hsl(20, 14.3%, 4.1%);
-  --radius: 0.5rem;
+  --background: linear-gradient(135deg, #f8f9fd 0%, #e0e7ff 100%);
+  --foreground: #22223B;
+  --muted: #e0e7ff;
+  --muted-foreground: #6c63ff;
+  --popover: #fff;
+  --popover-foreground: #22223B;
+  --card: #fff;
+  --card-foreground: #22223B;
+  --border: #e0e7ff;
+  --input: #e0e7ff;
+  --primary: #6C63FF;
+  --primary-foreground: #fff;
+  --secondary: #43E6FC;
+  --secondary-foreground: #fff;
+  --accent: #A259FF;
+  --accent-foreground: #fff;
+  --destructive: #FF6B6B;
+  --destructive-foreground: #fff;
+  --ring: #A259FF;
+  --radius: 0.75rem;
 }
 
 .dark {
-  --background: hsl(240, 10%, 3.9%);
-  --foreground: hsl(0, 0%, 98%);
-  --muted: hsl(240, 3.7%, 15.9%);
-  --muted-foreground: hsl(240, 5%, 64.9%);
-  --popover: hsl(240, 10%, 3.9%);
-  --popover-foreground: hsl(0, 0%, 98%);
-  --card: hsl(240, 10%, 3.9%);
-  --card-foreground: hsl(0, 0%, 98%);
-  --border: hsl(240, 3.7%, 15.9%);
-  --input: hsl(240, 3.7%, 15.9%);
-  --primary: hsl(207, 90%, 54%);
-  --primary-foreground: hsl(211, 100%, 99%);
-  --secondary: hsl(240, 3.7%, 15.9%);
-  --secondary-foreground: hsl(0, 0%, 98%);
-  --accent: hsl(240, 3.7%, 15.9%);
-  --accent-foreground: hsl(0, 0%, 98%);
-  --destructive: hsl(0, 62.8%, 30.6%);
-  --destructive-foreground: hsl(0, 0%, 98%);
-  --ring: hsl(240, 4.9%, 83.9%);
-  --radius: 0.5rem;
+  --background: linear-gradient(135deg, #211C3A 0%, #23214A 100%);
+  --foreground: #F8F8FF;
+  --muted: #2B2250;
+  --muted-foreground: #A259FF;
+  --popover: #23214A;
+  --popover-foreground: #F8F8FF;
+  --card: #23214A;
+  --card-foreground: #F8F8FF;
+  --border: #2B2250;
+  --input: #2B2250;
+  --primary: #A259FF;
+  --primary-foreground: #fff;
+  --secondary: #43E6FC;
+  --secondary-foreground: #fff;
+  --accent: #FFB86B;
+  --accent-foreground: #23214A;
+  --destructive: #FF6B6B;
+  --destructive-foreground: #fff;
+  --ring: #FFD166;
+  --radius: 0.75rem;
 }
 
 @layer base {
