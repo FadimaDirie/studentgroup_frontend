@@ -34,13 +34,19 @@ export default function RegisterPage() {
       const res = await fetch("https://mernstack-backend-vtfj.onrender.com/api/users/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ full_name: fullName, email, password, type: role })
+        body: JSON.stringify({ full_name: fullName, email, password, role })
       });
       const data = await res.json();
+      console.log('Register response:', data); // DEBUG
       if (!res.ok) {
         setError(data.message || "Registration failed");
       } else {
-        setLocation("/login");
+        // Always redirect to dashboard after registration
+        if (data.token && data.user) {
+          localStorage.setItem("token", data.token);
+          localStorage.setItem("user", JSON.stringify(data.user));
+        }
+        setLocation("/"); // dashboard
       }
     } catch (err) {
       setError("Network error. Please try again.");

@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/app-layout";
-import { StatsCards } from "@/components/stats/stats-cards";
+import { useGetGroupsQuery, useDeleteGroupMutation, useUpdateGroupMutation, useGetTasksQuery, useGetAllUsersQuery } from "@/lib/apiSlice";
 import { GroupCard } from "@/components/groups/group-card";
 import { TaskTable } from "@/components/tasks/task-table";
 import { CreateGroupModal } from "@/components/groups/create-group-modal";
@@ -10,8 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { GroupWithStats } from "@shared/schema";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
-import { BarChart3, Users, CheckSquare, Calendar, User, Group, CheckCircle, Settings } from "lucide-react";
+import { BarChart3, Users, CheckSquare, Calendar, User, Group, CheckCircle, Settings, Edit, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 const stats = [
   { label: "Total Students", value: 120, icon: Users, color: "from-blue-500 to-blue-400" },
@@ -60,16 +62,102 @@ const statGradients = [
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editGroup, setEditGroup] = useState<any | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [updateGroup, { isLoading: updating }] = useUpdateGroupMutation();
+  const [deleteGroup] = useDeleteGroupMutation();
 
-  const { data: groups, isLoading: groupsLoading } = useQuery<GroupWithStats[]>({
-    queryKey: ["/api/groups"],
-  });
+  // Get logged-in user
+  let user: any = null;
+  try {
+    user = JSON.parse(localStorage.getItem("user") || "null");
+  } catch {}
+  const isAdmin = user?.role === "admin";
 
-  const handleGroupClick = (groupId: number) => {
+  const { data: groups = [], isLoading: groupsLoading } = useGetGroupsQuery();
+  const { data: tasks = [], isLoading: tasksLoading } = useGetTasksQuery();
+  const { data: users = [], isLoading: usersLoading } = useGetAllUsersQuery();
+
+  // Stat cards dynamic
+  const totalStudents = users.length;
+  const activeGroups = groups.length;
+  const tasksCompleted = tasks.filter((t: any) => t.status === "completed").length;
+  const pendingTasks = tasks.filter((t: any) => t.status === "pending").length;
+  const inProgressTasks = tasks.filter((t: any) => t.status === "in_progress").length;
+  const statCards = [
+    { label: "Total Students", value: totalStudents, icon: Users, color: "from-blue-500 to-blue-400" },
+    { label: "Active Groups", value: activeGroups, icon: BarChart3, color: "from-green-500 to-green-400" },
+    { label: "Tasks Completed", value: tasksCompleted, icon: CheckSquare, color: "from-purple-500 to-purple-400" },
+    { label: "Pending Tasks", value: pendingTasks, icon: Calendar, color: "from-yellow-400 to-yellow-200" },
+    { label: "In Progress Tasks", value: inProgressTasks, icon: Calendar, color: "from-pink-500 to-pink-400" },
+  ];
+
+  // Recent Groups
+  const recentGroups = groups.slice().sort((a: any, b: any) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 6);
+
+  // Recent Tasks
+  const recentTasks = tasks.slice().sort((a: any, b: any) => new Date(b.created_at || b.createdAt) - new Date(a.created_at || a.createdAt)).slice(0, 6);
+
+  // Recent Activity (tasks created, groups created)
+  const recentActivity = [
+    ...tasks.map((t: any) => ({
+      type: "task",
+      text: `Task '${t.title}' created`,
+      time: t.created_at || t.createdAt,
+      icon: CheckSquare,
+      badge: "Task"
+    })),
+    ...groups.map((g: any) => ({
+      type: "group",
+      text: `Group '${g.name}' created`,
+      time: g.createdAt,
+      icon: Group,
+      badge: "Group"
+    })),
+  ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 6);
+
+  const groupColors = [
+    "from-indigo-500 via-purple-500 to-pink-500",
+    "from-blue-500 via-cyan-500 to-green-400",
+    "from-yellow-400 via-orange-500 to-red-500",
+  ];
+  const taskColors = [
+    "from-green-400 to-blue-500",
+    "from-pink-500 to-yellow-500",
+    "from-purple-500 to-indigo-500",
+  ];
+  const statGradients = [
+    "from-blue-500 to-blue-400",
+    "from-green-500 to-green-400",
+    "from-purple-500 to-purple-400",
+    "from-pink-500 to-pink-400",
+  ];
+
+  const handleGroupClick = (groupId: string) => {
     setLocation(`/groups/${groupId}`);
   };
 
-  const recentGroups = (groups && groups.length > 0 ? groups.slice(0, 6) : mockGroups);
+  const handleEditGroup = (group: any) => {
+    setEditGroup(group);
+    setEditName(group.name);
+    setEditDescription(group.description);
+    setEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editGroup) return;
+    await updateGroup({ id: editGroup.id, data: { name: editName, description: editDescription } });
+    setEditModalOpen(false);
+  };
+
+  const handleDeleteGroup = async (groupId: string) => {
+    if (window.confirm("Are you sure you want to delete this group?")) {
+      await deleteGroup(groupId);
+    }
+  };
 
   return (
     <AppLayout
@@ -81,23 +169,23 @@ export default function Dashboard() {
       }}
     >
       <div className="space-y-6 bg-background text-foreground transition-colors duration-500">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map((stat, idx) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+          {statCards.map((stat, idx) => (
             <Card
               key={stat.label}
-              className={`relative overflow-hidden shadow-xl group transition-transform hover:scale-[1.03] border-0 bg-gradient-to-br ${statGradients[idx % statGradients.length]} text-white dark:text-white`}
+              className={`relative overflow-hidden shadow-xl group transition-transform hover:scale-[1.03] border-0 bg-gradient-to-br ${statGradients[idx % statGradients.length]} text-white dark:text-white p-4`}
             >
-              <div className="absolute right-0 top-0 opacity-20 text-[7rem] pointer-events-none">
-                <stat.icon className="w-24 h-24" />
+              <div className="absolute right-0 top-0 opacity-20 text-[5rem] pointer-events-none">
+                <stat.icon className="w-16 h-16" />
               </div>
-              <CardHeader className="relative z-10 flex flex-col items-start justify-center min-h-[120px]">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="inline-flex items-center justify-center rounded-full bg-white/20 p-3">
-                    <stat.icon className="w-8 h-8" />
+              <CardHeader className="relative z-10 flex flex-col items-start justify-center min-h-[80px] p-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="inline-flex items-center justify-center rounded-full bg-white/20 p-2">
+                    <stat.icon className="w-6 h-6" />
                   </span>
-                  <CardTitle className="text-3xl font-bold drop-shadow-lg">{stat.value}</CardTitle>
+                  <CardTitle className="text-2xl font-bold drop-shadow-lg">{stat.value}</CardTitle>
                 </div>
-                <CardDescription className="text-lg font-medium text-white/80 drop-shadow-sm">{stat.label}</CardDescription>
+                <CardDescription className="text-base font-medium text-white/80 drop-shadow-sm">{stat.label}</CardDescription>
               </CardHeader>
             </Card>
           ))}
@@ -119,7 +207,7 @@ export default function Dashboard() {
                       <span className="text-base font-medium">{item.text}</span>
                       <Badge className="bg-accent text-accent-foreground border-0 shadow-md">{item.badge}</Badge>
                     </div>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">{item.time}</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{new Date(item.time).toLocaleString()}</span>
                   </li>
                 ))}
               </ul>
@@ -130,9 +218,7 @@ export default function Dashboard() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-foreground">Recent Groups</h3>
-            <Button variant="link" onClick={() => setLocation("/groups")}>
-              View All
-            </Button>
+            <Button variant="link" onClick={() => setLocation("/groups")}>View All</Button>
           </div>
 
           {groupsLoading ? (
@@ -158,23 +244,36 @@ export default function Dashboard() {
             </div>
           ) : recentGroups.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {recentGroups.map((group, idx) => {
+              {recentGroups.map((group: any, idx: number) => {
                 const name = group.name || "Unnamed Group";
                 const description = group.description || "No description";
                 let members = 0;
                 if ((group as any).members !== undefined) {
-                  members = (group as any).members;
+                  members = typeof group.members === 'number' ? group.members : (Array.isArray(group.members) ? group.members.length : 0);
                 } else if ((group as any).memberCount !== undefined) {
                   members = (group as any).memberCount;
                 }
                 const createdAt = (typeof group.createdAt === "string" ? group.createdAt : (group.createdAt ? group.createdAt.toLocaleDateString() : ""));
                 return (
                   <div
-                  key={group.id}
+                    key={group._id || group.id || idx}
                     className={`relative rounded-2xl shadow-xl overflow-hidden cursor-pointer group transition-transform hover:scale-105 bg-gradient-to-br ${groupColors[idx % groupColors.length]} p-0`}
-                    onClick={() => handleGroupClick(group.id)}
+                    onClick={() => handleGroupClick(group._id || group.id || idx)}
                     style={{ minHeight: 180 }}
                   >
+                    {/* Edit/Delete buttons */}
+                    <div className="absolute top-3 right-3 flex gap-2 z-20" onClick={e => e.stopPropagation()}>
+                      {isAdmin && (
+                        <>
+                          <span className="p-1 rounded hover:bg-muted transition cursor-pointer" title="Edit" onClick={() => handleEditGroup(group)}>
+                            <Edit className="w-5 h-5 text-primary" />
+                          </span>
+                          <span className="p-1 rounded hover:bg-destructive/10 transition cursor-pointer" title="Delete" onClick={() => handleDeleteGroup(group._id || group.id || idx)}>
+                            <Trash2 className="w-5 h-5 text-destructive" />
+                          </span>
+                        </>
+                      )}
+                    </div>
                     <div className="absolute inset-0 bg-white/30 dark:bg-black/30 backdrop-blur-md z-0" />
                     <div className="relative z-10 p-6 flex flex-col h-full justify-between">
                       <div className="flex items-center gap-4 mb-2">
@@ -211,16 +310,16 @@ export default function Dashboard() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-foreground">Recent Tasks</h3>
-            <Button variant="link" onClick={() => setLocation("/tasks")}>
-              View All
-            </Button>
+            <Button variant="link" onClick={() => setLocation("/tasks")}>View All</Button>
           </div>
 
-          {(mockTasks.length > 0) ? (
+          {tasksLoading ? (
+            <div className="text-center py-8">Loading tasks...</div>
+          ) : recentTasks.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {mockTasks.map((task, idx) => (
+              {recentTasks.map((task: any, idx: number) => (
                 <div
-                  key={task.id}
+                  key={task._id || task.id || idx}
                   className={`relative rounded-2xl shadow-xl overflow-hidden group transition-transform hover:scale-105 bg-gradient-to-br ${taskColors[idx % taskColors.length]} p-0`}
                   style={{ minHeight: 160 }}
                 >
@@ -232,13 +331,13 @@ export default function Dashboard() {
                       </span>
                       <div>
                         <h4 className="text-lg font-bold text-white drop-shadow-lg">{task.title}</h4>
-                        <p className="text-white/80 text-xs drop-shadow">Group: {task.group}</p>
+                        <p className="text-white/80 text-xs drop-shadow">Group: {task.group_id || task.group || "Unknown"}</p>
                       </div>
                     </div>
                     <div className="flex items-center justify-between mt-4">
-                      <Badge className={`shadow-md ${task.priority === "High" ? "bg-red-500/80" : task.priority === "Medium" ? "bg-yellow-400/80" : "bg-white/30 text-white"}`}>{task.priority}</Badge>
+                      <Badge className={`shadow-md ${task.priority === "High" ? "bg-red-500/80" : task.priority === "Medium" ? "bg-yellow-400/80" : "bg-white/30 text-white"}`}>{task.priority || "-"}</Badge>
                       <span className="text-xs text-white/80 font-medium bg-black/20 rounded-full px-3 py-1">{task.status}</span>
-                      <span className="text-xs text-white/80 font-medium bg-black/20 rounded-full px-3 py-1">Due: {task.due}</span>
+                      <span className="text-xs text-white/80 font-medium bg-black/20 rounded-full px-3 py-1">Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : "-"}</span>
                     </div>
                   </div>
                   <div className="absolute right-4 top-4 opacity-20 group-hover:opacity-40 transition-opacity">
@@ -259,6 +358,33 @@ export default function Dashboard() {
         open={showCreateGroup}
         onOpenChange={setShowCreateGroup}
       />
+
+      {/* Edit Group Modal */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Group</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <div>
+              <label className="block mb-1 font-medium">Group Name</label>
+              <Input value={editName} onChange={e => setEditName(e.target.value)} />
+            </div>
+            <div>
+              <label className="block mb-1 font-medium">Description</label>
+              <Textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={3} />
+            </div>
+            <div className="flex justify-end space-x-3 pt-4">
+              <Button type="button" variant="outline" onClick={() => setEditModalOpen(false)} disabled={updating}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updating}>
+                {updating ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

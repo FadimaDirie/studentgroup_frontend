@@ -9,8 +9,8 @@ const navigation = [
   { name: "Dashboard", href: "/", icon: Home },
   { name: "Groups", href: "/groups", icon: Users },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
-  { name: "Calendar", href: "/calendar", icon: Calendar },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
+  // { name: "Calendar", href: "/calendar", icon: Calendar },
+  { name: "User Management", href: "/user-management", icon: Users },
 ];
 
 export function Sidebar() {

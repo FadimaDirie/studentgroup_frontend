@@ -72,18 +72,14 @@ export function CreateGroupModal({ open, onOpenChange }: CreateGroupModalProps) 
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <FormLabel>Group Name</FormLabel>
-            <FormControl>
-              <Input placeholder="Enter group name..." value={name} onChange={e => setName(e.target.value)} className="bg-input text-foreground border border-border" />
-            </FormControl>
+            <label className="block mb-1 font-medium">Group Name</label>
+            <Input placeholder="Enter group name..." value={name} onChange={e => setName(e.target.value)} className="bg-input text-foreground border border-border" />
           </div>
           <div>
-            <FormLabel>Description</FormLabel>
-            <FormControl>
-              <Textarea placeholder="Describe your group's purpose..." rows={3} value={description} onChange={e => setDescription(e.target.value)} className="bg-input text-foreground border border-border" />
-            </FormControl>
+            <label className="block mb-1 font-medium">Description</label>
+            <Textarea placeholder="Describe your group's purpose..." rows={3} value={description} onChange={e => setDescription(e.target.value)} className="bg-input text-foreground border border-border" />
           </div>
-          {error && <FormMessage className="text-destructive">{error}</FormMessage>}
+          {error && <div className="text-destructive text-sm">{error}</div>}
           <div className="flex justify-end space-x-3 pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancel

@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [, setLocation] = useLocation();
 
   async function handleLogin(e: React.FormEvent) {
+
     e.preventDefault();
     setError("");
     if (!email || !password) {
@@ -25,7 +26,7 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const res = await fetch("https://mernstack-student-colloboration.onrender.com/api/users/login", {
+      const res = await fetch("https://mernstack-backend-vtfj.onrender.com/api/users/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })

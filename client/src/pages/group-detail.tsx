@@ -1,35 +1,40 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Users } from "lucide-react";
+import { Users, Edit, Trash2 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "react-hot-toast";
+import {
+  useGetGroupsQuery,
+  useGetGroupMembersQuery,
+  useJoinGroupMutation,
+  useAddGroupMemberMutation,
+  useCreateGroupMutation,
+  useUpdateGroupMutation,
+  useDeleteGroupMutation,
+  useGetAllUsersQuery
+} from "@/lib/apiSlice";
 
 export default function GroupDetail() {
-  const [groups, setGroups] = useState<any[]>([]);
-  const [loadingGroups, setLoadingGroups] = useState(true);
-  const [errorGroups, setErrorGroups] = useState("");
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
-  const [createLoading, setCreateLoading] = useState(false);
-  const [createError, setCreateError] = useState("");
   const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
   const [showGroupModal, setShowGroupModal] = useState(false);
+  const [addMemberEmail, setAddMemberEmail] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
-  const [editLoading, setEditLoading] = useState(false);
-  const [editError, setEditError] = useState("");
-  const [addMemberEmail, setAddMemberEmail] = useState("");
-  const [addMemberLoading, setAddMemberLoading] = useState(false);
-  const [addMemberError, setAddMemberError] = useState("");
-  const [joinLoading, setJoinLoading] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editGroup, setEditGroup] = useState<any | null>(null);
+  const { data: allUsers = [] } = useGetAllUsersQuery();
+  const [addMemberModalOpen, setAddMemberModalOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
 
   // Get logged-in user
   let user: any = null;
@@ -37,68 +42,24 @@ export default function GroupDetail() {
     user = JSON.parse(localStorage.getItem("user") || "null");
   } catch {}
   const userId = user?._id;
+  const isAdmin = user?.role === "admin";
 
-  // Fetch all groups
-  useEffect(() => {
-    async function fetchGroups() {
-      setLoadingGroups(true);
-      setErrorGroups("");
-      try {
-        const res = await fetch("https://mernstack-backend-vtfj.onrender.com/api");
-        const data = await res.json();
-        if (!res.ok) {
-          setErrorGroups(data.message || "Failed to fetch groups");
-        } else {
-          setGroups(data);
-        }
-      } catch (err) {
-        setErrorGroups("Network error. Please try again.");
-      } finally {
-        setLoadingGroups(false);
-      }
-    }
-    fetchGroups();
-  }, []);
+  // RTK Query hooks
+  const { data: groups = [], isLoading: loadingGroups, error: errorGroups } = useGetGroupsQuery();
+  const groupId = selectedGroup?._id;
+  const { data: members = [], isLoading: loadingMembers } = useGetGroupMembersQuery(groupId, { skip: !groupId });
+  const [joinGroup, { isLoading: joinLoading }] = useJoinGroupMutation();
+  const [addGroupMember, { isLoading: addMemberLoading }] = useAddGroupMemberMutation();
+  const [createGroup, { isLoading: createLoading }] = useCreateGroupMutation();
+  const [updateGroup, { isLoading: editLoading }] = useUpdateGroupMutation();
+  const [deleteGroup] = useDeleteGroupMutation();
 
-  // Create group handler
-  async function handleCreateGroup(e: React.FormEvent) {
-    e.preventDefault();
-    setCreateError("");
-    if (!createName || !createDescription) {
-      setCreateError("Please fill all fields");
-      return;
-    }
-    if (!userId) {
-      setCreateError("User not found. Please login again.");
-      return;
-    }
-    setCreateLoading(true);
-    try {
-      const res = await fetch("https://mernstack-backend-vtfj.onrender.com/api/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: createName,
-          description: createDescription,
-          createdBy: userId,
-          members: [userId]
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setCreateError(data.message || "Failed to create group");
-      } else {
-        setGroups((prev) => [...prev, data.group]);
-        setShowCreateGroup(false);
-        setCreateName("");
-        setCreateDescription("");
-      }
-    } catch (err) {
-      setCreateError("Network error. Please try again.");
-    } finally {
-      setCreateLoading(false);
-    }
-  }
+  // Ensure members is always an array
+  const memberList = Array.isArray(members) ? members : members?.members || [];
+
+  // Filter users to only those not already in the group
+  const groupMemberIds = memberList.map((m: any) => m.userId?._id || m.userId);
+  const availableUsers = allUsers.filter((u: any) => !groupMemberIds.includes(u._id));
 
   // Handler: open group modal
   function handleOpenGroupModal(group: any) {
@@ -109,126 +70,85 @@ export default function GroupDetail() {
     setEditDescription(group.description);
   }
 
+  // Handler: join group
+  async function handleJoinGroup() {
+    if (!groupId || !userId) return;
+    try {
+      await joinGroup({ groupId, userId }).unwrap();
+      toast.success("Joined group!");
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to join group");
+    }
+  }
+
+  // Handler: add member (admin only)
+  async function handleAddMember(e: React.FormEvent) {
+    e.preventDefault();
+    if (!groupId || !addMemberEmail) return;
+    try {
+      await addGroupMember({ groupId, userId: addMemberEmail, createdBy: userId });
+        setAddMemberEmail("");
+        toast.success("Member added!");
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to add member");
+    }
+  }
+
+  // Handler: create group
+  async function handleCreateGroup(e: React.FormEvent) {
+    e.preventDefault();
+    if (!createName || !createDescription) {
+      toast.error("Please fill all fields");
+      return;
+    }
+    if (!userId) {
+      toast.error("User not found. Please login again.");
+      return;
+    }
+    try {
+      await createGroup({
+        name: createName,
+        description: createDescription,
+        createdBy: userId,
+        members: [userId],
+      }).unwrap();
+      setShowCreateGroup(false);
+      setCreateName("");
+      setCreateDescription("");
+      toast.success("Group created!");
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to create group");
+    }
+  }
+
   // Handler: update group info (owner only)
   async function handleUpdateGroup(e: React.FormEvent) {
     e.preventDefault();
-    setEditError("");
-    setEditLoading(true);
+    if (!editName || !editDescription || !groupId) {
+      toast.error("Please fill all fields");
+      return;
+    }
     try {
-      const res = await fetch(`https://mernstack-backend-vtfj.onrender.com/api/groups/${selectedGroup._id}/update`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editName, description: editDescription }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setEditError(data.message || "Failed to update group");
-      } else {
-        setGroups((prev) => prev.map(g => g._id === selectedGroup._id ? { ...g, name: editName, description: editDescription } : g));
-        setSelectedGroup((g: any) => ({ ...g, name: editName, description: editDescription }));
-        setEditMode(false);
-        toast.success("Group updated!");
-      }
-    } catch {
-      setEditError("Network error. Please try again.");
-    } finally {
-      setEditLoading(false);
+      await updateGroup({ id: groupId, data: { name: editName, description: editDescription } }).unwrap();
+      setEditMode(false);
+      toast.success("Group updated!");
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to update group");
     }
   }
 
-  // Handler: add member (owner only)
-  async function handleAddMember(e: React.FormEvent) {
+  const handleEditClick = (group: any) => {
+    setEditGroup(group);
+    setEditName(group.name);
+    setEditDescription(group.description);
+    setEditModalOpen(true);
+  };
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAddMemberError("");
-    setAddMemberLoading(true);
-    try {
-      const res = await fetch(`https://mernstack-backend-vtfj.onrender.com/api/groups/${selectedGroup._id}/add-member`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: addMemberEmail }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setAddMemberError(data.message || "Failed to add member");
-      } else {
-        setGroups((prev) => prev.map(g => g._id === selectedGroup._id ? { ...g, members: data.members } : g));
-        setSelectedGroup((g: any) => ({ ...g, members: data.members }));
-        setAddMemberEmail("");
-        toast.success("Member added!");
-      }
-    } catch {
-      setAddMemberError("Network error. Please try again.");
-    } finally {
-      setAddMemberLoading(false);
-    }
-  }
-
-  // Handler: remove member (owner only)
-  async function handleRemoveMember(memberId: string) {
-    if (!window.confirm("Remove this member from the group?")) return;
-    try {
-      const res = await fetch(`https://mernstack-backend-vtfj.onrender.com/api/groups/${selectedGroup._id}/remove-member/${memberId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.message || "Failed to remove member");
-      } else {
-        setGroups((prev) => prev.map(g => g._id === selectedGroup._id ? { ...g, members: data.members } : g));
-        setSelectedGroup((g: any) => ({ ...g, members: data.members }));
-        toast.success("Member removed!");
-      }
-    } catch {
-      toast.error("Network error. Please try again.");
-    }
-  }
-
-  // Handler: update group admin (make member admin)
-  async function handleMakeAdmin(newAdminId: string) {
-    if (!window.confirm("Are you sure you want to make this member the new admin?")) return;
-    try {
-      const res = await fetch(`https://mernstack-backend-vtfj.onrender.com/api/${selectedGroup._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adminId: newAdminId }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.message || "Failed to update admin");
-      } else {
-        setGroups((prev) => prev.map(g => g._id === selectedGroup._id ? { ...g, createdBy: newAdminId } : g));
-        setSelectedGroup((g: any) => ({ ...g, createdBy: newAdminId }));
-        toast.success("Admin updated!");
-      }
-    } catch {
-      toast.error("Network error. Please try again.");
-    }
-  }
-
-  // Handler: join group
-  async function handleJoinGroup() {
-    setJoinLoading(true);
-    try {
-      const res = await fetch(`https://mernstack-backend-vtfj.onrender.com/api/groups/${selectedGroup._id}/join`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.message || "Failed to join group");
-      } else {
-        setGroups((prev) => prev.map(g => g._id === selectedGroup._id ? { ...g, members: data.members } : g));
-        setSelectedGroup((g: any) => ({ ...g, members: data.members }));
-        toast.success("Joined group!");
-      }
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setJoinLoading(false);
-    }
-  }
+    if (!editGroup) return;
+    await updateGroup({ id: editGroup._id, data: { name: editName, description: editDescription } });
+    setEditModalOpen(false);
+  };
 
   // Gradients for cards
   const gradients = [
@@ -254,18 +174,35 @@ export default function GroupDetail() {
         {loadingGroups ? (
           <div>Loading groups...</div>
         ) : errorGroups ? (
-          <div className="text-destructive">{errorGroups}</div>
+          <div className="text-destructive">{String(errorGroups)}</div>
         ) : groups.length === 0 ? (
           <div>No groups found.</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {groups.map((group, idx) => (
+            {groups.map((group: any, idx: number) => {
+              const handleDelete = async () => {
+                if (window.confirm("Are you sure you want to delete this group?")) {
+                  await deleteGroup(group._id);
+                }
+              };
+              return (
               <div
                 key={group._id}
                 className={`relative rounded-2xl shadow-xl overflow-hidden cursor-pointer group transition-transform hover:scale-105 bg-gradient-to-br ${gradients[idx % gradients.length]} p-0`}
                 onClick={() => handleOpenGroupModal(group)}
                 style={{ minHeight: 180 }}
               >
+                  {/* Edit/Delete buttons */}
+                  {isAdmin && (
+                    <div className="absolute top-3 right-3 flex gap-2 z-20">
+                      <button onClick={e => { e.stopPropagation(); handleEditClick(group); }} title="Edit" className="p-1 rounded hover:bg-muted transition">
+                        <Edit className="w-5 h-5 text-primary" />
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); handleDelete(); }} title="Delete" className="p-1 rounded hover:bg-destructive/10 transition">
+                        <Trash2 className="w-5 h-5 text-destructive" />
+                      </button>
+                    </div>
+                  )}
                 <div className="absolute inset-0 bg-card/90 rounded-2xl z-10" />
                 <div className="relative z-10 p-6 flex flex-col h-full justify-between">
                   <div className="flex items-center gap-4 mb-2">
@@ -286,7 +223,8 @@ export default function GroupDetail() {
                   <Users className="w-16 h-16 text-white" />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -305,7 +243,6 @@ export default function GroupDetail() {
                       <form onSubmit={handleUpdateGroup} className="space-y-2">
                         <Input value={editName} onChange={e => setEditName(e.target.value)} className="font-bold text-lg" />
                         <Textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={2} />
-                        {editError && <div className="text-destructive text-sm">{editError}</div>}
                         <div className="flex gap-2 mt-2">
                           <Button type="button" variant="outline" onClick={() => setEditMode(false)} disabled={editLoading}>Cancel</Button>
                           <Button type="submit" disabled={editLoading}>{editLoading ? "Saving..." : "Save"}</Button>
@@ -321,51 +258,85 @@ export default function GroupDetail() {
                         </div>
                         <div className="text-muted-foreground mb-2 text-lg">{selectedGroup.description}</div>
                         <div className="flex gap-2 mt-2">
-                          {selectedGroup.createdBy === userId && (
+                          {isAdmin && selectedGroup.createdBy === userId && (
                             <Button size="sm" variant="secondary" onClick={() => setEditMode(true)}>Edit</Button>
                           )}
                         </div>
                       </>
                     )}
                   </div>
-                  {/* Join button */}
-                  {selectedGroup.members && !selectedGroup.members.some((m: any) => m._id === userId) && (
-                    <Button onClick={handleJoinGroup} disabled={joinLoading} variant="default" className="text-lg px-6 py-2 rounded-xl shadow-md bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0">
-                      {joinLoading ? "Joining..." : "Join Group"}
-                    </Button>
+                  {/* Show Add Member for owner only (robust check) */}
+                  {selectedGroup && userId && (
+                    (selectedGroup.createdBy?._id?.toString() === userId?.toString() ||
+                     selectedGroup.createdBy?.toString() === userId?.toString()) && (
+                      <Button
+                        onClick={() => setAddMemberModalOpen(true)}
+                        variant="default"
+                        className="text-lg px-6 py-2 rounded-xl shadow-md bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0"
+                      >
+                        Add Member
+                      </Button>
+                    )
+                  )}
+                  {/* Show Join Group for non-owners who are not members */}
+                  {selectedGroup && userId && (
+                    (selectedGroup.createdBy?._id?.toString() !== userId?.toString() &&
+                     selectedGroup.createdBy?.toString() !== userId?.toString() &&
+                     !memberList.some((m: any) => {
+                       const memberId = m.userId?._id || m.userId || m._id || m.id;
+                       console.log('join check memberId:', memberId, 'userId:', userId);
+                       return memberId?.toString() === userId?.toString();
+                     })) && (
+                      <Button
+                        onClick={handleJoinGroup}
+                        disabled={joinLoading}
+                        variant="default"
+                        className="text-lg px-6 py-2 rounded-xl shadow-md bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0"
+                      >
+                        {joinLoading ? "Joining..." : "Join Group"}
+                      </Button>
+                    )
                   )}
                 </div>
-                {/* Members List */}
+                {/* Members List always visible */}
                 <div>
-                  <div className="font-semibold mb-2 text-lg text-primary">Members ({selectedGroup.members?.length || 0})</div>
+                  <div className="font-semibold mb-2 text-lg text-primary">Members ({memberList?.length || 0})</div>
                   <div className="flex flex-wrap gap-4">
-                    {selectedGroup.members?.map((member: any) => (
-                      <div key={member._id} className="flex flex-col items-center gap-2 bg-muted rounded-xl px-4 py-3 shadow-md min-w-[110px] transition-all hover:scale-105">
-                        <Avatar className="w-12 h-12 text-lg font-bold bg-gradient-to-br from-blue-400 to-purple-500 text-white">
-                          {member.name?.[0] || member.email?.[0] || '?'}
-                        </Avatar>
-                        <span className="font-medium text-primary text-base">{member.name || member.email || 'Unknown'}</span>
-                        {selectedGroup.createdBy === member._id ? (
-                          <Badge variant="secondary" className="bg-yellow-400/80 text-black border-0">Admin</Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-blue-100 text-blue-700 border-0">Member</Badge>
-                        )}
-                        {selectedGroup.createdBy === userId && member._id !== userId && (
-                          <div className="flex flex-col gap-1 w-full">
-                            <Button size="sm" variant="destructive" className="mt-1" onClick={() => handleRemoveMember(member._id)}>Remove</Button>
-                            <Button size="sm" variant="secondary" className="mt-1" onClick={() => handleMakeAdmin(member._id)}>Make Admin</Button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {memberList?.map((member: any) => {
+                      const memberId = member._id;
+                      const createdById = selectedGroup.createdBy?._id || selectedGroup.createdBy;
+                      const isOwner = createdById?.toString() === memberId?.toString();
+                      return (
+                        <div key={memberId} className="flex flex-col items-center gap-2 bg-muted rounded-xl px-4 py-3 shadow-md min-w-[110px] transition-all hover:scale-105">
+                          <Avatar className="w-12 h-12 text-lg font-bold bg-gradient-to-br from-blue-400 to-purple-500 text-white">
+                            {member.full_name?.[0] || member.email?.[0] || '?'}
+                          </Avatar>
+                          <span className="font-medium text-primary text-base">{member.full_name || member.email || 'Unknown'}</span>
+                          {isOwner ? (
+                            <Badge variant="secondary" className="bg-yellow-400/80 text-black border-0">admin</Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-blue-100 text-blue-700 border-0">Member</Badge>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   {/* Add member (owner only) */}
                   {selectedGroup.createdBy === userId && (
                     <form onSubmit={handleAddMember} className="flex gap-2 mt-6 items-center">
-                      <Input placeholder="Add member by email..." value={addMemberEmail} onChange={e => setAddMemberEmail(e.target.value)} className="max-w-xs" />
+                      <Input placeholder="Add member by userId..." value={addMemberEmail} onChange={e => setAddMemberEmail(e.target.value)} className="max-w-xs" />
                       <Button type="submit" size="sm" disabled={addMemberLoading} className="bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0">{addMemberLoading ? "Adding..." : "Add Member"}</Button>
-                      {addMemberError && <span className="text-destructive text-sm ml-2">{addMemberError}</span>}
                     </form>
+                  )}
+                </div>
+                <div className="flex gap-2 mt-2">
+                  {isAdmin && selectedGroup.createdBy === userId && (
+                    <Button size="sm" variant="destructive" onClick={async () => {
+                      if (window.confirm("Are you sure you want to delete this group?")) {
+                        await deleteGroup(selectedGroup._id);
+                        setShowGroupModal(false);
+                      }
+                    }}>Delete</Button>
                   )}
                 </div>
               </div>
@@ -382,13 +353,12 @@ export default function GroupDetail() {
             <form onSubmit={handleCreateGroup} className="space-y-4">
                 <div>
                 <label className="block mb-1 font-medium">Group Name</label>
-                <Input placeholder="Enter group name..." value={createName} onChange={e => setCreateName(e.target.value)} />
+                <Input value={createName} onChange={e => setCreateName(e.target.value)} />
               </div>
               <div>
                 <label className="block mb-1 font-medium">Description</label>
-                <Textarea placeholder="Describe your group's purpose..." rows={3} value={createDescription} onChange={e => setCreateDescription(e.target.value)} />
+                <Textarea value={createDescription} onChange={e => setCreateDescription(e.target.value)} rows={3} />
               </div>
-              {createError && <div className="text-destructive text-sm">{createError}</div>}
               <div className="flex justify-end space-x-3 pt-4">
                 <Button type="button" variant="outline" onClick={() => setShowCreateGroup(false)} disabled={createLoading}>
                           Cancel
@@ -400,6 +370,87 @@ export default function GroupDetail() {
                     </form>
                 </DialogContent>
               </Dialog>
+
+        {/* Shared Edit Modal */}
+        <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Group</DialogTitle>
+              <DialogDescription>
+                Update the name and description of your group.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <label className="block mb-1 font-medium">Name</label>
+                <Input value={editName} onChange={e => setEditName(e.target.value)} />
+              </div>
+              <div>
+                <label className="block mb-1 font-medium">Description</label>
+                <Input value={editDescription} onChange={e => setEditDescription(e.target.value)} />
+              </div>
+              <div className="flex justify-end space-x-3 pt-4">
+                <Button type="button" variant="outline" onClick={() => setEditModalOpen(false)} disabled={editLoading}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={editLoading}>
+                  {editLoading ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Member Modal for owner only (robust check) */}
+        {selectedGroup && userId && (
+          (selectedGroup.createdBy?._id?.toString() === userId?.toString() ||
+           selectedGroup.createdBy?.toString() === userId?.toString()) && (
+            <Dialog open={addMemberModalOpen} onOpenChange={setAddMemberModalOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Add Member</DialogTitle>
+                  <DialogDescription>Select a user to add to this group.</DialogDescription>
+                </DialogHeader>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!selectedUserId) return;
+                    console.log({ groupId: selectedGroup._id, userId: selectedUserId, createdBy: userId });
+                    await addGroupMember({ groupId: selectedGroup._id, userId: selectedUserId, createdBy: userId });
+                    setSelectedUserId("");
+                    setAddMemberModalOpen(false);
+                  }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <label className="block mb-1 font-medium">Select User</label>
+                    <select
+                      value={selectedUserId}
+                      onChange={e => setSelectedUserId(e.target.value)}
+                      className="w-full border rounded px-2 py-2"
+                      required
+                    >
+                      <option value="">-- Select User --</option>
+                      {availableUsers.map((u: any) => (
+                        <option key={u._id} value={u._id}>
+                          {u.full_name} ({u.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex justify-end space-x-3 pt-4">
+                    <Button type="button" variant="outline" onClick={() => setAddMemberModalOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={!selectedUserId}>
+                      Add
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )
+        )}
       </div>
     </AppLayout>
   );

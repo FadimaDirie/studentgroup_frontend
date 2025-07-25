@@ -1,17 +1,33 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { isToday, isTomorrow, formatDistanceToNow, differenceInCalendarDays } from "date-fns";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatDate(date: Date | string): string {
-  const d = new Date(date);
+export function formatDate(d: string | Date | undefined | null) {
+  if (!d) return "N/A";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return "N/A";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(d);
+  }).format(date);
+}
+
+export function formatDueDateRelative(date: string | Date | undefined | null) {
+  if (!date) return "N/A";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "N/A";
+  if (isToday(d)) return "Today";
+  if (isTomorrow(d)) return "Tomorrow";
+  const diff = differenceInCalendarDays(d, new Date());
+  if (diff > 1 && diff <= 7) return "This Week";
+  if (diff > 7 && diff <= 14) return "Next Week";
+  if (diff < 0) return formatDistanceToNow(d, { addSuffix: true }); // e.g. "2 days ago"
+  return formatDistanceToNow(d, { addSuffix: true }); // e.g. "in 3 days"
 }
 
 export function formatRelativeTime(date: Date | string): string {

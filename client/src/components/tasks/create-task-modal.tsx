@@ -1,4 +1,3 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -7,77 +6,55 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import { insertTaskSchema, type InsertTask, type Group, type Member } from "@shared/schema";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { z } from "zod";
+import { useCreateTaskMutation, useGetGroupsQuery } from "@/lib/apiSlice";
+import { useState } from "react";
+
+const createTaskSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  description: z.string().min(1, "Description is required"),
+  groupId: z.string().min(1, "Group is required"),
+});
 
 interface CreateTaskModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialGroupId?: number;
+  initialGroupId?: string;
 }
 
 export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTaskModalProps) {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const { data: groups } = useGetGroupsQuery();
+  const [createTask, { isLoading }] = useCreateTaskMutation();
+  const [dueDate, setDueDate] = useState("");
 
-  const { data: groups } = useQuery<Group[]>({
-    queryKey: ["/api/groups"],
-  });
-
-  const form = useForm<InsertTask>({
-    resolver: zodResolver(insertTaskSchema.extend({
-      dueDate: insertTaskSchema.shape.dueDate.optional(),
-    })),
+  const form = useForm({
+    resolver: zodResolver(createTaskSchema),
     defaultValues: {
-      groupId: initialGroupId || undefined,
+      groupId: initialGroupId || "",
       title: "",
       description: "",
-      status: "pending",
-      priority: "medium",
-      assigneeId: undefined,
-      dueDate: undefined,
     },
   });
 
-  const selectedGroupId = form.watch("groupId");
-
-  const { data: members } = useQuery<Member[]>({
-    queryKey: ["/api/groups", selectedGroupId, "members"],
-    enabled: !!selectedGroupId,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async (data: InsertTask) => {
-      const response = await apiRequest("POST", "/api/tasks", data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({
-        title: "Success",
-        description: "Task created successfully!",
-      });
+  const onSubmit = async (data: any) => {
+    // Map groupId to group_id for backend
+    const payload = {
+      ...data,
+      group_id: data.groupId,
+      due_date: dueDate ? new Date(dueDate) : undefined,
+    };
+    delete payload.groupId;
+    try {
+      await createTask(payload).unwrap();
+      toast({ title: "Success", description: "Task created successfully!" });
       form.reset();
+      setDueDate("");
       onOpenChange(false);
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const onSubmit = (data: InsertTask) => {
-    createMutation.mutate(data);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
   };
 
   return (
@@ -86,7 +63,6 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
         <DialogHeader>
           <DialogTitle>Create New Task</DialogTitle>
         </DialogHeader>
-        
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
@@ -95,15 +71,15 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Group</FormLabel>
-                  <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString()}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="bg-input text-foreground border border-border">
                         <SelectValue placeholder="Select a group" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {groups?.map((group) => (
-                        <SelectItem key={group.id} value={group.id.toString()}>
+                      {groups?.map((group: any) => (
+                        <SelectItem key={group._id || group.id} value={group._id || group.id}>
                           {group.name}
                         </SelectItem>
                       ))}
@@ -113,7 +89,6 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                 </FormItem>
               )}
             />
-
             <FormField
               control={form.control}
               name="title"
@@ -127,7 +102,6 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                 </FormItem>
               )}
             />
-            
             <FormField
               control={form.control}
               name="description"
@@ -147,142 +121,19 @@ export function CreateTaskModal({ open, onOpenChange, initialGroupId }: CreateTa
                 </FormItem>
               )}
             />
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="bg-input text-foreground border border-border">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="priority"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Priority</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="bg-input text-foreground border border-border">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
+            {/* Due date input */}
+            <div>
+              <FormLabel>Due Date</FormLabel>
+              <Input
+                type="date"
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+                className="bg-input text-foreground border border-border"
               />
             </div>
-
-            <FormField
-              control={form.control}
-              name="assigneeId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Assignee</FormLabel>
-                  <Select 
-                    onValueChange={(value) => field.onChange(value === "unassigned" ? undefined : parseInt(value))} 
-                    value={field.value?.toString() || "unassigned"}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="bg-input text-foreground border border-border">
-                        <SelectValue placeholder="Select an assignee (optional)" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {members?.map((member) => (
-                        <SelectItem key={member.id} value={member.id.toString()}>
-                          {member.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="dueDate"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Due Date</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {field.value ? (
-                            format(field.value, "PPP")
-                          ) : (
-                            <span>Pick a date (optional)</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value ?? undefined}
-                        onSelect={field.onChange}
-                        disabled={(date) =>
-                          date < new Date() || date < new Date("1900-01-01")
-                        }
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            <div className="flex justify-end space-x-3 pt-4">
-              <Button 
-                type="button" 
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={createMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button 
-                type="submit"
-                disabled={createMutation.isPending}
-              >
-                {createMutation.isPending ? "Creating..." : "Create Task"}
-              </Button>
-            </div>
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Creating..." : "Create Task"}
+            </Button>
           </form>
         </Form>
       </DialogContent>
