@@ -164,15 +164,17 @@ export const apiSlice = createApi({
     }),
     suspendUser: builder.mutation<any, string>({
       query: (id) => ({
-        url: `/api/users/${id}/suspend`,
+        url: `/api/users/${id}`,
         method: 'PUT',
+        body: { is_suspended: true },
       }),
       invalidatesTags: ['User'],
     }),
     unsuspendUser: builder.mutation<any, string>({
       query: (id) => ({
-        url: `/api/users/${id}/unsuspend`,
+        url: `/api/users/${id}`,
         method: 'PUT',
+        body: { is_suspended: false },
       }),
       invalidatesTags: ['User'],
     }),

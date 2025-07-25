@@ -17,6 +17,17 @@ export default function UserManagement() {
   const [suspendUser, { isLoading: suspending }] = useSuspendUserMutation();
   const [unsuspendUser, { isLoading: unsuspending }] = useUnsuspendUserMutation();
 
+  // Debug: Check authentication
+  let user: any = null;
+  try {
+    user = JSON.parse(localStorage.getItem("user") || "null");
+  } catch {}
+  const token = localStorage.getItem("token");
+  
+  console.log("Debug - User:", user);
+  console.log("Debug - Token:", token);
+  console.log("Debug - User Role:", user?.role);
+
   // Edit modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editUser, setEditUser] = useState<any | null>(null);
@@ -41,11 +52,14 @@ export default function UserManagement() {
       u.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Stat cards
+  // Stat cards - calculate from users array since backend counts might not be working
+  const activeUsersCount = users.filter((u: any) => !u.is_suspended).length;
+  const suspendedUsersCount = users.filter((u: any) => u.is_suspended).length;
+  
   const statCards = [
     { label: "Total Users", value: users.length, color: "from-blue-500 to-blue-400" },
-    { label: "Active Users", value: unsuspendedCount, color: "from-green-500 to-green-400" },
-    { label: "Suspended Users", value: suspendedCount, color: "from-red-500 to-pink-400" },
+    { label: "Active Users", value: activeUsersCount, color: "from-green-500 to-green-400" },
+    { label: "Suspended Users", value: suspendedUsersCount, color: "from-red-500 to-pink-400" },
   ];
 
   function handleEditUser(user: any) {
@@ -134,20 +148,44 @@ export default function UserManagement() {
                   <td className="py-2 px-4 capitalize">{user.role}</td>
                   <td className="py-2 px-4">{new Date(user.created_at).toLocaleDateString()}</td>
                   <td className="py-2 px-4 text-center">
-                    <button
-                      className={`bg-blue-100 p-2 rounded-full text-blue-600 hover:bg-blue-200 mx-1`}
-                      title={user.suspended ? "Unsuspend" : "Suspend"}
-                      onClick={async () => {
-                        if (user.suspended) {
-                          await unsuspendUser(user._id);
-                        } else {
-                          await suspendUser(user._id);
-                        }
-                        refetch();
-                      }}
-                    >
-                      {user.suspended ? <FaEyeSlash /> : <FaEye />}
-                    </button>
+                    {user.role === "admin" ? (
+                      <button
+                        className="p-2 rounded-full mx-1 bg-gray-100 text-gray-400 cursor-not-allowed"
+                        title="Admin users cannot be suspended"
+                        disabled
+                      >
+                        <FaEye size={16} />
+                      </button>
+                    ) : (
+                      <button
+                        className={`p-2 rounded-full mx-1 transition-all duration-200 ${
+                          user.is_suspended 
+                            ? 'bg-red-100 text-red-600 hover:bg-red-200' 
+                            : 'bg-green-100 text-green-600 hover:bg-green-200'
+                        }`}
+                        title={user.is_suspended ? "Unsuspend User" : "Suspend User"}
+                        onClick={async () => {
+                          try {
+                            console.log("Debug - Attempting to suspend/unsuspend user:", user._id);
+                            console.log("Debug - Current suspended status:", user.is_suspended);
+                            
+                            if (user.is_suspended) {
+                              console.log("Debug - Unsuspending user...");
+                              await unsuspendUser(user._id);
+                            } else {
+                              console.log("Debug - Suspending user...");
+                              await suspendUser(user._id);
+                            }
+                            refetch();
+                          } catch (error) {
+                            console.error("Debug - Suspend/Unsuspend error:", error);
+                            alert("Failed to suspend/unsuspend user. Please check console for details.");
+                          }
+                        }}
+                      >
+                        {user.is_suspended ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+                      </button>
+                    )}
                     <button className="bg-green-100 p-2 rounded-full text-green-600 hover:bg-green-200 mx-1" title="Edit" onClick={() => handleEditUser(user)}>
                       <FaEdit />
                     </button>
